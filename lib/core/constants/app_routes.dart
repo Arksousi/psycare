@@ -1,5 +1,5 @@
 // app_routes.dart
-// Named route constants used for navigation across PsyCare.
+// Named route constants used for navigation across PsyCare
 
 /// Centralized route name constants to avoid magic strings in navigation calls.
 class AppRoutes {
