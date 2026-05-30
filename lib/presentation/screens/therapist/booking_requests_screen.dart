@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../core/localization/app_localizations.dart';
@@ -9,6 +10,10 @@ import '../../../data/models/booking_model.dart';
 import '../../../data/repositories/chat_repository.dart';
 import '../../../domain/providers/auth_provider.dart';
 import '../../../domain/providers/booking_provider.dart';
+import '../../../data/repositories/patient_repository.dart' show PatientRepository;
+
+String _formatScheduledAt(DateTime dt) =>
+    '${DateFormat('EEE d MMM').format(dt)}  ·  ${DateFormat('h:mm a').format(dt)}';
 
 class BookingRequestsScreen extends ConsumerWidget {
   const BookingRequestsScreen({super.key});
@@ -287,6 +292,74 @@ class _PendingCard extends ConsumerWidget {
               ),
             ],
           ),
+          if (booking.scheduledAt != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today_rounded,
+                      size: 13, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    _formatScheduledAt(booking.scheduledAt!),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () async {
+                try {
+                  await PatientRepository().stampTherapistId(
+                      booking.patientId, booking.therapistId);
+                  final patient = await PatientRepository()
+                      .getPatient(booking.patientId);
+                  if (!context.mounted) return;
+                  if (patient == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Assessment not available')),
+                    );
+                    return;
+                  }
+                  Navigator.pushNamed(context, AppRoutes.patientDetail,
+                      arguments: patient);
+                } catch (_) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not load patient data')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.assignment_rounded,
+                  size: 16, color: AppColors.primary),
+              label: const Text(
+                'View Assessment',
+                style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600),
+              ),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -518,6 +591,75 @@ class _ConfirmedCard extends ConsumerWidget {
                 tooltip: context.tr('cancelBooking'),
               ),
             ],
+          ),
+
+          if (booking.scheduledAt != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today_rounded,
+                      size: 13, color: AppColors.success),
+                  const SizedBox(width: 6),
+                  Text(
+                    _formatScheduledAt(booking.scheduledAt!),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.success,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () async {
+                try {
+                  await PatientRepository().stampTherapistId(
+                      booking.patientId, booking.therapistId);
+                  final patient = await PatientRepository()
+                      .getPatient(booking.patientId);
+                  if (!context.mounted) return;
+                  if (patient == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Assessment not available')),
+                    );
+                    return;
+                  }
+                  Navigator.pushNamed(context, AppRoutes.patientDetail,
+                      arguments: patient);
+                } catch (_) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not load patient data')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.assignment_rounded,
+                  size: 16, color: AppColors.primary),
+              label: const Text(
+                'View Assessment',
+                style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600),
+              ),
+              style: TextButton.styleFrom(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
           ),
 
           // Reschedule request banner

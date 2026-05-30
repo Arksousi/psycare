@@ -42,6 +42,8 @@ class BookingNotifier extends StateNotifier<BookingState> {
     required String therapistId,
     required String therapistName,
     required String sessionType,
+    DateTime? scheduledAt,
+    String? slotId,
   }) async {
     state = state.copyWith(isLoading: true);
     try {
@@ -55,6 +57,8 @@ class BookingNotifier extends StateNotifier<BookingState> {
         requestedAt: DateTime.now(),
         sessionType: sessionType,
         consentGiven: true,
+        scheduledAt: scheduledAt,
+        slotId: slotId,
       );
       await _repo.createBookingRequest(booking);
       state = state.copyWith(isLoading: false, success: true);

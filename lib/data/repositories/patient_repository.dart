@@ -38,6 +38,18 @@ class PatientRepository implements PatientRepositoryBase {
     }
   }
 
+  /// Stamps [therapistId] onto the patient document.
+  /// Permitted by Firestore rules for any authenticated therapist.
+  Future<void> stampTherapistId(String patientId, String therapistId) async {
+    try {
+      await _firebase.updateDocument('patients', patientId, {
+        'therapistId': therapistId,
+      });
+    } catch (e) {
+      throw Exception('Failed to stamp therapistId: $e');
+    }
+  }
+
   /// Saves assessment answers without submitting.
   @override
   Future<void> saveAssessment(String uid, List<int> answers) async {

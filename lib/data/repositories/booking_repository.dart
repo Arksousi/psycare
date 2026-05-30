@@ -13,10 +13,29 @@ class BookingRepository {
       : _firebase = firebase ?? FirebaseService.instance;
 
   Future<void> createBookingRequest(BookingRequest booking) async {
-    await _firebase.firestore
-        .collection('booking_requests')
-        .doc(booking.id)
-        .set(booking.toMap());
+    final firestore = _firebase.firestore;
+
+    // If a slot was selected, tentatively hold it in the same batch write.
+    if (booking.slotId != null && booking.slotId!.isNotEmpty) {
+      final batch = firestore.batch();
+      batch.set(
+        firestore.collection('booking_requests').doc(booking.id),
+        booking.toMap(),
+      );
+      batch.update(
+        firestore.collection('therapistSlots').doc(booking.slotId),
+        {
+          'isAvailable': false,
+          'bookedByPatientId': booking.patientId,
+        },
+      );
+      await batch.commit();
+    } else {
+      await firestore
+          .collection('booking_requests')
+          .doc(booking.id)
+          .set(booking.toMap());
+    }
   }
 
   Stream<List<BookingRequest>> streamPendingBookings(String therapistId) {
@@ -56,18 +75,10 @@ class BookingRepository {
       {'status': 'confirmed'},
     );
 
-    // Stamp therapistId on the patient document so they appear in
-    // watchPatientsForTherapist() and their assessment is visible.
-    batch.update(
-      firestore.collection('patients').doc(patientId),
-      {'therapistId': therapistId},
-    );
-
-    // Keep therapist.patients array in sync for the stats counter.
-    batch.update(
-      firestore.collection('therapists').doc(therapistId),
-      {'patients': FieldValue.arrayUnion([patientId])},
-    );
+    // Note: therapistId stamping and patients[] array update are now handled
+    // exclusively by TherapistConnectionService.acceptConnectionRequest().
+    // Booking acceptance only confirms the session schedule — the clinical
+    // relationship is established through the connection flow.
 
     // Create the direct chat session if one doesn't exist yet.
     if (existingSession.docs.isEmpty) {
@@ -86,24 +97,58 @@ class BookingRepository {
     }
 
     await batch.commit();
+
+    // Stamp therapistId on the patient document so Firestore rules allow
+    // the therapist to read the patient's assessment data.
+    await _firebase.updateDocument('patients', patientId, {
+      'therapistId': therapistId,
+    });
   }
 
   Future<void> declineBooking(String bookingId) async {
-    await _firebase.firestore
-        .collection('booking_requests')
-        .doc(bookingId)
-        .update({'status': 'declined'});
+    final firestore = _firebase.firestore;
+    final bookingRef =
+        firestore.collection('booking_requests').doc(bookingId);
+    final snap = await bookingRef.get();
+    final slotId = snap.data()?['slotId'] as String?;
+
+    if (slotId != null && slotId.isNotEmpty) {
+      final batch = firestore.batch();
+      batch.update(bookingRef, {'status': 'declined'});
+      batch.update(
+        firestore.collection('therapistSlots').doc(slotId),
+        {'isAvailable': true, 'bookedByPatientId': ''},
+      );
+      await batch.commit();
+    } else {
+      await bookingRef.update({'status': 'declined'});
+    }
   }
 
   Future<void> cancelBooking(String bookingId,
       {required String cancelledBy, String? reason}) async {
-    await _firebase.firestore
-        .collection('booking_requests')
-        .doc(bookingId)
-        .update({
+    final firestore = _firebase.firestore;
+    final bookingRef =
+        firestore.collection('booking_requests').doc(bookingId);
+    final snap = await bookingRef.get();
+    final slotId = snap.data()?['slotId'] as String?;
+
+    final update = {
       'status': 'cancelled_by_$cancelledBy',
       if (reason != null && reason.isNotEmpty) 'cancelReason': reason,
-    });
+    };
+
+    if (slotId != null && slotId.isNotEmpty) {
+      final batch = firestore.batch();
+      batch.update(bookingRef, update);
+      batch.update(
+        firestore.collection('therapistSlots').doc(slotId),
+        {'isAvailable': true, 'bookedByPatientId': ''},
+      );
+      await batch.commit();
+    } else {
+      await bookingRef.update(update);
+    }
   }
 
   Future<void> requestReschedule(String bookingId, String note) async {

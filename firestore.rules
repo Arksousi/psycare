@@ -202,6 +202,37 @@ service cloud.firestore {
       allow update: if isAuth() && resource.data.therapistId == request.auth.uid;
     }
 
+    // ─── therapistConnections/{id} ──────────────────────────────────────────
+    // Either participant (patient or therapist) can create, read, or update.
+    match /therapistConnections/{id} {
+      allow create: if isAuth();
+      allow read: if isAuth()
+                  && (resource.data.patientId == request.auth.uid
+                      || resource.data.therapistId == request.auth.uid);
+      allow update: if isAuth()
+                    && (resource.data.patientId == request.auth.uid
+                        || resource.data.therapistId == request.auth.uid);
+    }
+
+    // ─── therapistSlots/{slotId} ─────────────────────────────────────────────
+    // - Any auth user can read (patients need to browse available slots).
+    // - Only the owning therapist can create or delete their slots.
+    // - Therapist: full update on their own slots.
+    // - Patient (or any auth user): update only isAvailable + bookedByPatientId
+    //   (needed when booking holds or releases a slot).
+    match /therapistSlots/{slotId} {
+      allow read: if isAuth();
+      allow create: if isTherapist()
+                    && request.resource.data.therapistId == request.auth.uid;
+      allow delete: if isTherapist()
+                    && resource.data.therapistId == request.auth.uid;
+      allow update: if (isTherapist() && resource.data.therapistId == request.auth.uid)
+                    || (isAuth()
+                        && request.resource.data.diff(resource.data)
+                               .affectedKeys()
+                               .hasOnly(['isAvailable', 'bookedByPatientId']));
+    }
+
     // ─── chats/{chatId} ─────────────────────────────────────────────────────
     // Persistent therapist–patient chat. chatId format: {therapistId}_{patientId}
     // Both participants can read/write the thread and its messages.

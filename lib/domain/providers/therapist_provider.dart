@@ -5,7 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/patient_model.dart';
 import '../../data/models/therapist_model.dart';
+import '../../data/models/therapist_connection_model.dart';
 import '../../data/repositories/patient_repository.dart';
+import '../../core/services/therapist_connection_service.dart';
 import '../usecases/summarize_usecase.dart';
 import 'auth_provider.dart';
 import 'patient_provider.dart';
@@ -119,5 +121,58 @@ final availableImmediateCountProvider = StreamProvider.autoDispose<int>((ref) {
       .where('isAvailableForImmediate', isEqualTo: true)
       .snapshots()
       .map((snap) => snap.docs.length);
+});
+
+// ── Therapist Connection providers ───────────────────────────────────────────
+
+final therapistConnectionServiceProvider =
+    Provider<TherapistConnectionService>((ref) => TherapistConnectionService());
+
+/// Incoming patient-initiated requests visible to the therapist.
+final therapistIncomingConnectionRequestsProvider =
+    StreamProvider.autoDispose.family<List<TherapistConnectionModel>, String>(
+        (ref, therapistId) {
+  if (therapistId.isEmpty) return Stream.value([]);
+  return ref
+      .watch(therapistConnectionServiceProvider)
+      .getPendingRequestsForTherapist(therapistId);
+});
+
+/// Incoming therapist-initiated requests visible to the patient.
+final patientIncomingTherapistRequestsProvider =
+    StreamProvider.autoDispose.family<List<TherapistConnectionModel>, String>(
+        (ref, patientId) {
+  if (patientId.isEmpty) return Stream.value([]);
+  return ref
+      .watch(therapistConnectionServiceProvider)
+      .getPendingRequestsForPatient(patientId);
+});
+
+/// All therapistConnections for a patient (all statuses).
+final patientTherapistConnectionsProvider =
+    StreamProvider.autoDispose.family<List<TherapistConnectionModel>, String>(
+        (ref, patientId) {
+  if (patientId.isEmpty) return Stream.value([]);
+  return ref
+      .watch(therapistConnectionServiceProvider)
+      .watchPatientConnections(patientId);
+});
+
+/// All active therapistConnections for a therapist.
+final therapistActiveConnectionsProvider =
+    StreamProvider.autoDispose.family<List<TherapistConnectionModel>, String>(
+        (ref, therapistId) {
+  if (therapistId.isEmpty) return Stream.value([]);
+  return ref
+      .watch(therapistConnectionServiceProvider)
+      .watchTherapistConnections(therapistId);
+});
+
+/// All patients for the therapist browse screen.
+final allPatientsForTherapistProvider =
+    StreamProvider.autoDispose<List<Map<String, dynamic>>>((ref) {
+  return ref
+      .watch(therapistConnectionServiceProvider)
+      .getAllPatients();
 });
 

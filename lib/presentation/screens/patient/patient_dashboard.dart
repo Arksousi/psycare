@@ -2,8 +2,10 @@
 // Main dashboard for patients — shows welcome message and action cards.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../core/localization/app_localizations.dart';
@@ -14,7 +16,12 @@ import '../../../data/repositories/chat_repository.dart';
 import '../../../domain/providers/auth_provider.dart';
 import '../../../domain/providers/booking_provider.dart' show patientBookingsProvider;
 import '../../../domain/providers/patient_provider.dart';
-import '../../../domain/providers/therapist_provider.dart' show therapistByIdProvider, availableImmediateCountProvider;
+import '../../../domain/providers/therapist_provider.dart'
+    show
+        therapistByIdProvider,
+        availableImmediateCountProvider,
+        patientIncomingTherapistRequestsProvider,
+        therapistConnectionServiceProvider;
 import '../../../domain/providers/volunteer_provider.dart';
 
 
@@ -165,6 +172,9 @@ class PatientDashboard extends ConsumerWidget {
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
+
+              // Therapist connection requests (incoming from therapists)
+              _TherapistRequestsSection(patientId: user?.uid ?? ''),
 
               // Volunteer connection requests (incoming from volunteers)
               _VolunteerRequestsSection(patientId: user?.uid ?? ''),
@@ -424,8 +434,9 @@ class _BookingStatusCard extends ConsumerWidget {
     final therapistLabel = ((booking.therapistName as String?) ?? '').isNotEmpty
         ? booking.therapistName as String
         : context.tr('yourTherapist');
-    final isActionable =
-        status == 'pending' || status == 'confirmed';
+    final isActionable = status == 'pending' || status == 'confirmed';
+
+    final therapistId = (booking.therapistId as String?) ?? '';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -466,6 +477,119 @@ class _BookingStatusCard extends ConsumerWidget {
               ),
             ],
           ),
+          if (booking.scheduledAt != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: meta.color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.calendar_today_rounded,
+                      size: 13, color: meta.color),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${DateFormat('EEE d MMM').format(booking.scheduledAt as DateTime)}  ·  ${DateFormat('h:mm a').format(booking.scheduledAt as DateTime)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: meta.color,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (status == 'confirmed' && therapistId.isNotEmpty)
+            ref.watch(therapistByIdProvider(therapistId)).when(
+              loading: () => const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  'Loading contact info…',
+                  style: TextStyle(fontSize: 11, color: AppColors.textHint),
+                ),
+              ),
+              error: (_, __) => const SizedBox.shrink(),
+              data: (therapist) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: GestureDetector(
+                      onTap: therapist?.phoneNumber.isNotEmpty == true
+                          ? () {
+                              Clipboard.setData(
+                                  ClipboardData(text: therapist!.phoneNumber));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content:
+                                      Text('${therapist.phoneNumber} copied'),
+                                  duration: const Duration(seconds: 2),
+                                  backgroundColor: AppColors.textSecondary,
+                                ),
+                              );
+                            }
+                          : null,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.phone_rounded,
+                              size: 13, color: AppColors.success),
+                          const SizedBox(width: 6),
+                          Text(
+                            therapist?.phoneNumber.isNotEmpty == true
+                                ? therapist!.phoneNumber
+                                : 'Phone not provided',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: therapist?.phoneNumber.isNotEmpty == true
+                                  ? AppColors.success
+                                  : AppColors.textHint,
+                            ),
+                          ),
+                          if (therapist?.phoneNumber.isNotEmpty == true) ...[
+                            const SizedBox(width: 4),
+                            const Icon(Icons.copy_rounded,
+                                size: 11, color: AppColors.textHint),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on_rounded,
+                            size: 13, color: AppColors.primary),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            therapist?.clinicLocation.isNotEmpty == true
+                                ? therapist!.clinicLocation
+                                : 'Location not provided',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  therapist?.clinicLocation.isNotEmpty == true
+                                      ? AppColors.primary
+                                      : AppColors.textHint,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (isActionable) ...[
             const SizedBox(height: 12),
             Row(
@@ -1096,6 +1220,200 @@ class _AiInsightsCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Therapist Requests Section ────────────────────────────────────────────────
+
+class _TherapistRequestsSection extends ConsumerStatefulWidget {
+  final String patientId;
+  const _TherapistRequestsSection({required this.patientId});
+
+  @override
+  ConsumerState<_TherapistRequestsSection> createState() =>
+      _TherapistRequestsSectionState();
+}
+
+class _TherapistRequestsSectionState
+    extends ConsumerState<_TherapistRequestsSection> {
+  final _busy = <String, bool>{};
+
+  Future<void> _accept(String connectionId, String therapistId) async {
+    setState(() => _busy[connectionId] = true);
+    try {
+      final sessionId = await ref
+          .read(therapistConnectionServiceProvider)
+          .acceptConnectionRequest(
+            connectionId: connectionId,
+            patientId: widget.patientId,
+            therapistId: therapistId,
+          );
+      if (mounted) {
+        Navigator.pushNamed(
+          context,
+          AppRoutes.chat,
+          arguments: {
+            'sessionId': sessionId,
+            'therapistId': therapistId,
+          },
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy.remove(connectionId));
+    }
+  }
+
+  Future<void> _decline(String connectionId) async {
+    setState(() => _busy[connectionId] = true);
+    try {
+      await ref
+          .read(therapistConnectionServiceProvider)
+          .declineConnectionRequest(connectionId);
+    } finally {
+      if (mounted) setState(() => _busy.remove(connectionId));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.patientId.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+
+    final requestsAsync =
+        ref.watch(patientIncomingTherapistRequestsProvider(widget.patientId));
+
+    return requestsAsync.when(
+      data: (requests) {
+        if (requests.isEmpty) {
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
+        }
+        return SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Therapist Requests',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...requests.map((r) => Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.3)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.04),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor:
+                                  AppColors.primary.withValues(alpha: 0.12),
+                              child: Text(
+                                r.therapistName.isNotEmpty
+                                    ? r.therapistName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Dr. ${r.therapistFirstName}',
+                                    style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textPrimary),
+                                  ),
+                                  const Text(
+                                    'Wants to connect with you',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textHint),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_busy[r.connectionId] == true)
+                              const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primary),
+                              )
+                            else ...[
+                              GestureDetector(
+                                onTap: () => _decline(r.connectionId),
+                                child: const Padding(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 8),
+                                  child: Text(
+                                    'Decline',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: () =>
+                                    _accept(r.connectionId, r.therapistId),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Text(
+                                    'Accept',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    )),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+      error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
     );
   }
 }

@@ -40,6 +40,9 @@ import 'presentation/screens/volunteer/volunteer_dashboard_screen.dart';
 import 'presentation/screens/volunteer/my_connections_screen.dart';
 import 'presentation/screens/volunteer/volunteer_chat_screen.dart';
 import 'presentation/screens/volunteer/browse_patients_screen.dart';
+import 'presentation/screens/therapist/browse_unconnected_patients_screen.dart';
+import 'presentation/screens/therapist/therapist_connection_requests_screen.dart';
+import 'presentation/screens/therapist/manage_availability_screen.dart';
 
 /// Global navigator key — used by NotificationService to navigate on tap.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -115,6 +118,14 @@ class PsyCareApp extends ConsumerWidget {
         AppRoutes.browsePatients: (_) => const BrowsePatientsScreen(),
         AppRoutes.volunteerProfile: (_) => const VolunteerProfileScreen(),
         AppRoutes.volunteerChat: (_) => const VolunteerChatScreen(),
+
+        // Therapist connection routes
+        AppRoutes.therapistBrowsePatients: (_) =>
+            const BrowseUnconnectedPatientsScreen(),
+        AppRoutes.therapistConnectionRequests: (_) =>
+            const TherapistConnectionRequestsScreen(),
+        AppRoutes.manageAvailability: (_) =>
+            const ManageAvailabilityScreen(),
 
         // Shared
         AppRoutes.settings: (_) => const SettingsScreen(),

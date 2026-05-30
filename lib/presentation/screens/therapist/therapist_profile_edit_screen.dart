@@ -29,6 +29,7 @@ class _TherapistProfileEditScreenState
   final _fieldsCtrl = TextEditingController();
   final _langsCtrl = TextEditingController();
   final _locationCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
 
   final Set<String> _selectedSessionTypes = {};
 
@@ -54,6 +55,7 @@ class _TherapistProfileEditScreenState
     _fieldsCtrl.dispose();
     _langsCtrl.dispose();
     _locationCtrl.dispose();
+    _phoneCtrl.dispose();
     super.dispose();
   }
 
@@ -73,6 +75,7 @@ class _TherapistProfileEditScreenState
         _fieldsCtrl.text = therapist.specializedFields.join(', ');
         _langsCtrl.text = therapist.languages.join(', ');
         _locationCtrl.text = therapist.clinicLocation;
+        _phoneCtrl.text = therapist.phoneNumber;
         _selectedSessionTypes
           ..clear()
           ..addAll(therapist.sessionTypes);
@@ -104,6 +107,7 @@ class _TherapistProfileEditScreenState
           .toList(),
       sessionTypes: _selectedSessionTypes.toList(),
       clinicLocation: _locationCtrl.text.trim(),
+      phoneNumber: _phoneCtrl.text.trim(),
     );
 
     try {
@@ -284,6 +288,13 @@ class _TherapistProfileEditScreenState
                         label: 'Clinic Location',
                         hint: 'e.g. King Fahd Road, Riyadh',
                         controller: _locationCtrl,
+                      ),
+                      const SizedBox(height: 12),
+                      _Field(
+                        label: 'Phone Number',
+                        hint: 'e.g. +966 50 000 0000',
+                        controller: _phoneCtrl,
+                        keyboardType: TextInputType.phone,
                       ),
                       const SizedBox(height: 32),
                       SizedBox(

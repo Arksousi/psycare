@@ -1,16 +1,158 @@
 // therapist_profile_screen.dart
-// Detailed profile view for a therapist — shown before booking.
+// Detailed profile view for a therapist — shown before booking or connecting.
 // ignore_for_file: prefer_const_constructors
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../data/models/therapist_model.dart';
+import '../../../domain/providers/auth_provider.dart';
+import '../../../domain/providers/therapist_provider.dart';
 
-class TherapistProfileScreen extends StatelessWidget {
+class TherapistProfileScreen extends ConsumerStatefulWidget {
   const TherapistProfileScreen({super.key});
+
+  @override
+  ConsumerState<TherapistProfileScreen> createState() =>
+      _TherapistProfileScreenState();
+}
+
+class _TherapistProfileScreenState
+    extends ConsumerState<TherapistProfileScreen> {
+  bool _consentChecked = false;
+  bool _sendingRequest = false;
+
+  Future<void> _showConsentSheet(
+      BuildContext context, TherapistModel therapist, String patientId, String patientName) async {
+    setState(() => _consentChecked = false);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModal) => Padding(
+          padding: EdgeInsets.fromLTRB(
+              24, 24, 24, 24 + MediaQuery.of(ctx).viewInsets.bottom),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Connect with ${therapist.name}',
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'By connecting, this therapist will have access to your assessment results and journal entries so they can support you better.',
+                style: const TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                    height: 1.5),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Checkbox(
+                    value: _consentChecked,
+                    activeColor: AppColors.primary,
+                    onChanged: (v) {
+                      setModal(() => _consentChecked = v ?? false);
+                      setState(() => _consentChecked = v ?? false);
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 12),
+                      child: Text(
+                        'I consent to sharing my assessment and journal data with this therapist.',
+                        style: TextStyle(
+                            fontSize: 13, color: AppColors.textPrimary),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: _consentChecked && !_sendingRequest
+                      ? () async {
+                          Navigator.pop(ctx);
+                          setState(() => _sendingRequest = true);
+                          try {
+                            await ref
+                                .read(therapistConnectionServiceProvider)
+                                .sendConnectionRequest(
+                                  patientId: patientId,
+                                  therapistId: therapist.uid,
+                                  patientName: patientName,
+                                  therapistName: therapist.name,
+                                  initiatedBy: 'patient',
+                                  consentGiven: true,
+                                );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Connection request sent!'),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Error: $e'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _sendingRequest = false);
+                          }
+                        }
+                      : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Send Request',
+                      style: TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +164,17 @@ class TherapistProfileScreen extends StatelessWidget {
         body: Center(child: Text('Therapist not found')),
       );
     }
+
+    final user = ref.watch(currentUserProvider);
+    final connectionsAsync =
+        ref.watch(patientTherapistConnectionsProvider(user?.uid ?? ''));
+
+    // Determine connection status with this specific therapist
+    final connectionStatus = connectionsAsync.valueOrNull
+        ?.where((c) => c.therapistId == therapist.uid)
+        .firstOrNull;
+    final isConnected = connectionStatus?.isActive ?? false;
+    final isPending = connectionStatus?.isPending ?? false;
 
     return Scaffold(
       body: CustomScrollView(
@@ -209,7 +362,50 @@ class TherapistProfileScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                   ],
 
-                  // CTA
+                  // ── Connect button ────────────────────────────────────────
+                  if (isConnected)
+                    _ConnectedChip()
+                  else if (isPending)
+                    _PendingChip()
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _sendingRequest
+                            ? null
+                            : () => _showConsentSheet(
+                                context,
+                                therapist,
+                                user?.uid ?? '',
+                                user?.name ?? ''),
+                        icon: _sendingRequest
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primary),
+                              )
+                            : const Icon(Icons.person_add_rounded, size: 18),
+                        label: const Text('Connect'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          foregroundColor: AppColors.primary,
+                          side: const BorderSide(color: AppColors.primary),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  const SizedBox(height: 12),
+
+                  // ── Book Session button (always available) ────────────────
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -218,8 +414,7 @@ class TherapistProfileScreen extends StatelessWidget {
                         AppRoutes.bookingConsent,
                         arguments: therapist,
                       ),
-                      icon: const Icon(Icons.calendar_today_rounded,
-                          size: 18),
+                      icon: const Icon(Icons.calendar_today_rounded, size: 18),
                       label: Text(context.tr('bookSession')),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -252,6 +447,67 @@ class TherapistProfileScreen extends StatelessWidget {
       return Icons.location_on_rounded;
     }
     return Icons.chat_bubble_rounded;
+  }
+}
+
+class _ConnectedChip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.success.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.check_circle_rounded,
+              color: AppColors.success, size: 18),
+          SizedBox(width: 8),
+          Text(
+            'Connected',
+            style: TextStyle(
+                color: AppColors.success,
+                fontWeight: FontWeight.w700,
+                fontSize: 15),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingChip extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.textHint.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border:
+            Border.all(color: AppColors.textHint.withValues(alpha: 0.3)),
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.schedule_rounded,
+              color: AppColors.textSecondary, size: 18),
+          SizedBox(width: 8),
+          Text(
+            'Request Sent',
+            style: TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 15),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -34,7 +34,10 @@ class AppRoutes {
   // New therapist routes
   static const String incomingRequests = '/incoming-requests';
   static const String bookingRequests = '/booking-requests';
-static const String therapistProfileEdit = '/therapist-profile-edit';
+  static const String therapistProfileEdit = '/therapist-profile-edit';
+  static const String therapistBrowsePatients = '/therapist-browse-patients';
+  static const String therapistConnectionRequests = '/therapist-connection-requests';
+  static const String manageAvailability = '/manage-availability';
 
   // Shared
   static const String chatSessions = '/chat-sessions';

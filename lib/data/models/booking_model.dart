@@ -17,6 +17,8 @@ class BookingRequest {
   final bool consentGiven;
   final String? cancelReason;
   final String? rescheduleNote;
+  final DateTime? scheduledAt; // chosen time slot (null if no slot selected)
+  final String? slotId;        // reference to therapistSlots doc
 
   const BookingRequest({
     required this.id,
@@ -30,6 +32,8 @@ class BookingRequest {
     required this.consentGiven,
     this.cancelReason,
     this.rescheduleNote,
+    this.scheduledAt,
+    this.slotId,
   });
 
   factory BookingRequest.fromMap(String id, Map<String, dynamic> map) =>
@@ -46,6 +50,8 @@ class BookingRequest {
         consentGiven: map['consentGiven'] as bool? ?? false,
         cancelReason: map['cancelReason'] as String?,
         rescheduleNote: map['rescheduleNote'] as String?,
+        scheduledAt: (map['scheduledAt'] as Timestamp?)?.toDate(),
+        slotId: map['slotId'] as String?,
       );
 
   Map<String, dynamic> toMap() => {
@@ -59,5 +65,7 @@ class BookingRequest {
         'consentGiven': consentGiven,
         if (cancelReason != null) 'cancelReason': cancelReason,
         if (rescheduleNote != null) 'rescheduleNote': rescheduleNote,
+        if (scheduledAt != null) 'scheduledAt': Timestamp.fromDate(scheduledAt!),
+        if (slotId != null && slotId!.isNotEmpty) 'slotId': slotId,
       };
 }

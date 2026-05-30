@@ -21,6 +21,7 @@ class TherapistModel {
   final Map<String, String> workingHours;
   final String clinicLocation;
   final String clinicMapUrl;
+  final String phoneNumber;
   final double rating;
   final int reviewCount;
   final String profileImageUrl;
@@ -43,6 +44,7 @@ class TherapistModel {
     this.workingHours = const {},
     this.clinicLocation = '',
     this.clinicMapUrl = '',
+    this.phoneNumber = '',
     this.rating = 0.0,
     this.reviewCount = 0,
     this.profileImageUrl = '',
@@ -79,6 +81,7 @@ class TherapistModel {
               {}),
       clinicLocation: map['clinicLocation'] as String? ?? '',
       clinicMapUrl: map['clinicMapUrl'] as String? ?? '',
+      phoneNumber: map['phoneNumber'] as String? ?? '',
       rating: (map['rating'] as num?)?.toDouble() ?? 0.0,
       reviewCount: (map['reviewCount'] as num?)?.toInt() ?? 0,
       profileImageUrl: map['profileImageUrl'] as String? ?? '',
@@ -103,6 +106,7 @@ class TherapistModel {
       'workingHours': workingHours,
       'clinicLocation': clinicLocation,
       'clinicMapUrl': clinicMapUrl,
+      'phoneNumber': phoneNumber,
       'rating': rating,
       'reviewCount': reviewCount,
       'profileImageUrl': profileImageUrl,
@@ -126,6 +130,7 @@ class TherapistModel {
     Map<String, String>? workingHours,
     String? clinicLocation,
     String? clinicMapUrl,
+    String? phoneNumber,
     double? rating,
     int? reviewCount,
     String? profileImageUrl,
@@ -148,6 +153,7 @@ class TherapistModel {
       workingHours: workingHours ?? this.workingHours,
       clinicLocation: clinicLocation ?? this.clinicLocation,
       clinicMapUrl: clinicMapUrl ?? this.clinicMapUrl,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
       rating: rating ?? this.rating,
       reviewCount: reviewCount ?? this.reviewCount,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,

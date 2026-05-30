@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../core/localization/app_localizations.dart';
@@ -16,7 +17,8 @@ import '../../../domain/providers/therapist_provider.dart'
     show
         availableImmediateCountProvider,
         currentTherapistProvider,
-        therapistPatientsProvider;
+        therapistPatientsProvider,
+        therapistIncomingConnectionRequestsProvider;
 
 /// Therapist home screen showing a summary of their patient load.
 class TherapistDashboard extends ConsumerWidget {
@@ -150,6 +152,47 @@ class TherapistDashboard extends ConsumerWidget {
               ),
 
               const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+              // Upcoming confirmed sessions
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _UpcomingSessionsSection(
+                      therapistId: user?.uid ?? ''),
+                ).animate().fadeIn(delay: 242.ms).slideY(begin: 0.1, end: 0),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+              // Manage availability card
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: const _ManageAvailabilityCard(),
+                ).animate().fadeIn(delay: 255.ms).slideY(begin: 0.1, end: 0),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+              // Connection requests card
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _ConnectionRequestsCard(therapistId: user?.uid ?? ''),
+                ).animate().fadeIn(delay: 260.ms).slideY(begin: 0.1, end: 0),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
+
+              // Browse patients card
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: const _BrowsePatientsCard(),
+                ).animate().fadeIn(delay: 270.ms).slideY(begin: 0.1, end: 0),
+              ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 16)),
 
               // Session booking requests card
               SliverToBoxAdapter(
@@ -910,6 +953,398 @@ class _BubbleAction extends StatelessWidget {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _UpcomingSessionsSection extends ConsumerWidget {
+  final String therapistId;
+  const _UpcomingSessionsSection({required this.therapistId});
+
+  String _fmt(DateTime dt) =>
+      '${DateFormat('EEE d MMM').format(dt)}  ·  ${DateFormat('h:mm a').format(dt)}';
+
+  String _sessionIcon(String type) => type == 'in-person' ? '📍' : '💬';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bookingsAsync = ref.watch(confirmedBookingsProvider(therapistId));
+
+    return bookingsAsync.maybeWhen(
+      data: (all) {
+        final upcoming = all
+            .where((b) => b.scheduledAt != null)
+            .toList()
+          ..sort((a, b) => a.scheduledAt!.compareTo(b.scheduledAt!));
+        final shown = upcoming.take(3).toList();
+
+        if (shown.isEmpty) return const SizedBox.shrink();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Upcoming Sessions',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => Navigator.pushNamed(
+                      context, AppRoutes.bookingRequests),
+                  child: const Text(
+                    'See All →',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...shown.map((booking) {
+              final initials = booking.patientName.isNotEmpty
+                  ? booking.patientName
+                      .trim()
+                      .split(' ')
+                      .where((w) => w.isNotEmpty)
+                      .take(2)
+                      .map((w) => w[0].toUpperCase())
+                      .join()
+                  : '?';
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.35),
+                      width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.success.withValues(alpha: 0.06),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor:
+                          AppColors.success.withValues(alpha: 0.12),
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            booking.patientName,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Text(
+                                _sessionIcon(booking.sessionType),
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _fmt(booking.scheduledAt!),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.success,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.check_circle_rounded,
+                        color: AppColors.success, size: 18),
+                  ],
+                ),
+              );
+            }),
+          ],
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _ManageAvailabilityCard extends StatelessWidget {
+  const _ManageAvailabilityCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          Navigator.pushNamed(context, AppRoutes.manageAvailability),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.calendar_month_rounded,
+                  color: AppColors.success, size: 22),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Manage Availability',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Set your available time slots for patients',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                color: AppColors.textHint, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConnectionRequestsCard extends ConsumerWidget {
+  final String therapistId;
+  const _ConnectionRequestsCard({required this.therapistId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final count = ref
+        .watch(therapistIncomingConnectionRequestsProvider(therapistId))
+        .maybeWhen(data: (list) => list.length, orElse: () => 0);
+
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(
+          context, AppRoutes.therapistConnectionRequests),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+              color: AppColors.accent.withValues(alpha: 0.4), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.accent.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.person_add_rounded,
+                      color: AppColors.accent, size: 22),
+                ),
+                if (count > 0)
+                  Positioned(
+                    right: -4,
+                    top: -4,
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: const BoxDecoration(
+                        color: AppColors.accent,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        '$count',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Connection Requests',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const Text(
+                    'Patients who want to connect with you',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (count > 0)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              )
+            else
+              const Icon(Icons.arrow_forward_ios_rounded,
+                  color: AppColors.textHint, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BrowsePatientsCard extends StatelessWidget {
+  const _BrowsePatientsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () =>
+          Navigator.pushNamed(context, AppRoutes.therapistBrowsePatients),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.search_rounded,
+                  color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Browse Patients',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Find and connect with new patients',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded,
+                color: AppColors.textHint, size: 16),
+          ],
+        ),
       ),
     );
   }

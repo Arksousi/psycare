@@ -1,6 +1,7 @@
 // booking_consent_screen.dart
-// Session type selection + data-sharing consent before confirming a booking.
+// Session type selection, slot picker, and data-sharing consent before confirming a booking.
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,8 +9,24 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_routes.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../data/models/therapist_model.dart';
+import '../../../data/models/therapist_slot_model.dart';
 import '../../../domain/providers/auth_provider.dart';
 import '../../../domain/providers/booking_provider.dart';
+
+final _availableSlotsProvider =
+    StreamProvider.autoDispose.family<List<TherapistSlotModel>, String>(
+        (ref, therapistId) {
+  if (therapistId.isEmpty) return Stream.value([]);
+  return FirebaseFirestore.instance
+      .collection('therapistSlots')
+      .where('therapistId', isEqualTo: therapistId)
+      .where('isAvailable', isEqualTo: true)
+      .orderBy('dateTime', descending: false)
+      .snapshots()
+      .map((s) => s.docs
+          .map((d) => TherapistSlotModel.fromMap(d.id, d.data()))
+          .toList());
+});
 
 class BookingConsentScreen extends ConsumerStatefulWidget {
   const BookingConsentScreen({super.key});
@@ -21,22 +38,8 @@ class BookingConsentScreen extends ConsumerStatefulWidget {
 
 class _BookingConsentScreenState
     extends ConsumerState<BookingConsentScreen> {
-  String _selectedType = 'chat';
   bool _consentChecked = false;
-
-  static const _sessionTypes = [
-    ('chat', Icons.chat_bubble_rounded),
-    ('in-person', Icons.location_on_rounded),
-  ];
-
-  String _sessionTypeLabel(BuildContext context, String type) {
-    switch (type) {
-      case 'in-person':
-        return context.tr('inPersonSession');
-      default:
-        return context.tr('chatSession');
-    }
-  }
+  TherapistSlotModel? _selectedSlot;
 
   Future<void> _confirmBooking(TherapistModel therapist) async {
     final user = ref.read(currentUserProvider);
@@ -47,7 +50,9 @@ class _BookingConsentScreenState
       patientName: user?.name ?? '',
       therapistId: therapist.uid,
       therapistName: therapist.name,
-      sessionType: _selectedType,
+      sessionType: 'in-person',
+      scheduledAt: _selectedSlot?.dateTime,
+      slotId: _selectedSlot?.slotId,
     );
 
     if (!mounted) return;
@@ -101,6 +106,33 @@ class _BookingConsentScreenState
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (_selectedSlot != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_today_rounded,
+                        color: AppColors.primary, size: 15),
+                    const SizedBox(width: 6),
+                    Text(
+                      _selectedSlot!.formattedDateTime,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -136,6 +168,8 @@ class _BookingConsentScreenState
     if (therapist == null) {
       return const Scaffold(body: Center(child: Text('No therapist')));
     }
+
+    final slotsAsync = ref.watch(_availableSlotsProvider(therapist.uid));
 
     return Scaffold(
       body: Container(
@@ -197,68 +231,202 @@ class _BookingConsentScreenState
 
                 const SizedBox(height: 24),
 
-                // Session type
+                // Session badge — in-person only
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.07),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.location_on_rounded,
+                          color: AppColors.primary, size: 18),
+                      SizedBox(width: 10),
+                      Text(
+                        'In-Person Session',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 150.ms),
+
+                // Clinic location
+                if (therapist.clinicLocation.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Clinic Location',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.place_rounded,
+                            color: AppColors.textSecondary, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            therapist.clinicLocation,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textPrimary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ).animate().fadeIn(delay: 200.ms),
+                ],
+
+                const SizedBox(height: 28),
+
+                // ── Slot picker ───────────────────────────────────────────
                 Text(
-                  context.tr('preferredSessionType'),
+                  'Choose a Time Slot',
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                   ),
-                ).animate().fadeIn(delay: 150.ms),
+                ).animate().fadeIn(delay: 230.ms),
                 const SizedBox(height: 12),
-                Row(
-                  children: _sessionTypes.map((entry) {
-                    final (type, icon) = entry;
-                    final isSelected = _selectedType == type;
-                    return Expanded(
-                      child: GestureDetector(
-                        onTap: () =>
-                            setState(() => _selectedType = type),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 14),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.surface,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
+
+                slotsAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
+                  error: (_, __) => const SizedBox.shrink(),
+                  data: (slots) {
+                    if (slots.isEmpty) {
+                      return Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.border.withValues(alpha: 0.5),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded,
+                                color: AppColors.textHint, size: 18),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'No time slots available yet — your request will be sent without a scheduled time.',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                    height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ).animate().fadeIn(delay: 250.ms);
+                    }
+
+                    return Column(
+                      children: slots.map((slot) {
+                        final isSelected =
+                            _selectedSlot?.slotId == slot.slotId;
+                        return GestureDetector(
+                          onTap: () => setState(() {
+                            _selectedSlot =
+                                isSelected ? null : slot;
+                          }),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
                               color: isSelected
                                   ? AppColors.primary
-                                  : AppColors.border,
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              Icon(
-                                icon,
+                                  : AppColors.surface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
                                 color: isSelected
-                                    ? Colors.white
-                                    : AppColors.textSecondary,
-                                size: 22,
+                                    ? AppColors.primary
+                                    : AppColors.border,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _sessionTypeLabel(context, type),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: AppColors.primary
+                                            .withValues(alpha: 0.2),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 3),
+                                      )
+                                    ]
+                                  : null,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.access_time_rounded,
+                                  size: 18,
                                   color: isSelected
                                       ? Colors.white
-                                      : AppColors.textSecondary,
+                                      : AppColors.primary,
                                 ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        slot.formattedDate,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                          color: isSelected
+                                              ? Colors.white
+                                              : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${slot.formattedTime}  ·  ${slot.durationMinutes} min',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isSelected
+                                              ? Colors.white
+                                                  .withValues(alpha: 0.85)
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (isSelected)
+                                  const Icon(Icons.check_circle_rounded,
+                                      color: Colors.white, size: 18),
+                              ],
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      }).toList(),
                     );
-                  }).toList(),
-                ).animate().fadeIn(delay: 200.ms),
+                  },
+                ).animate().fadeIn(delay: 250.ms),
 
                 const SizedBox(height: 28),
 
@@ -270,7 +438,7 @@ class _BookingConsentScreenState
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                   ),
-                ).animate().fadeIn(delay: 250.ms),
+                ).animate().fadeIn(delay: 300.ms),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.all(16),
@@ -288,7 +456,7 @@ class _BookingConsentScreenState
                       height: 1.5,
                     ),
                   ),
-                ).animate().fadeIn(delay: 300.ms),
+                ).animate().fadeIn(delay: 350.ms),
                 const SizedBox(height: 14),
                 GestureDetector(
                   onTap: () =>
@@ -330,7 +498,7 @@ class _BookingConsentScreenState
                       ),
                     ],
                   ),
-                ).animate().fadeIn(delay: 350.ms),
+                ).animate().fadeIn(delay: 400.ms),
 
                 const SizedBox(height: 32),
 
@@ -344,8 +512,7 @@ class _BookingConsentScreenState
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       backgroundColor: AppColors.primary,
-                      disabledBackgroundColor:
-                          AppColors.border,
+                      disabledBackgroundColor: AppColors.border,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -366,7 +533,7 @@ class _BookingConsentScreenState
                           )
                         : Text(context.tr('confirmBooking')),
                   ),
-                ).animate().fadeIn(delay: 400.ms),
+                ).animate().fadeIn(delay: 450.ms),
 
                 const SizedBox(height: 32),
               ],
