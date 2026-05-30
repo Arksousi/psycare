@@ -26,14 +26,11 @@ class _BookingConsentScreenState
 
   static const _sessionTypes = [
     ('chat', Icons.chat_bubble_rounded),
-    ('video', Icons.videocam_rounded),
     ('in-person', Icons.location_on_rounded),
   ];
 
   String _sessionTypeLabel(BuildContext context, String type) {
     switch (type) {
-      case 'video':
-        return context.tr('videoSession');
       case 'in-person':
         return context.tr('inPersonSession');
       default:

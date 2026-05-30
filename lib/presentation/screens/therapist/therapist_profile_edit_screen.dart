@@ -37,7 +37,7 @@ class _TherapistProfileEditScreenState
   bool _saving = false;
   String? _error;
 
-  static const _sessionTypeOptions = ['Chat', 'Video', 'In-Person'];
+  static const _sessionTypeOptions = ['Chat', 'In-Person'];
 
   @override
   void initState() {

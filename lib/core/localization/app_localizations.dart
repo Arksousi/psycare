@@ -110,7 +110,6 @@ class AppLocalizations {
       'bookSession': 'Book a Session',
       'preferredSessionType': 'Preferred session type',
       'chatSession': 'Chat',
-      'videoSession': 'Video Call',
       'inPersonSession': 'In-Person',
       'dataSharingConsent': 'Data sharing consent',
       'consentBody':
@@ -416,7 +415,6 @@ class AppLocalizations {
       'bookSession': 'حجز جلسة',
       'preferredSessionType': 'نوع الجلسة المفضل',
       'chatSession': 'محادثة',
-      'videoSession': 'مكالمة مرئية',
       'inPersonSession': 'حضورياً',
       'dataSharingConsent': 'موافقة على مشاركة البيانات',
       'consentBody':

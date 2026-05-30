@@ -186,8 +186,6 @@ class _PendingCard extends ConsumerWidget {
 
   String _sessionTypeLabel(BuildContext context, String type) {
     switch (type) {
-      case 'video':
-        return context.tr('videoSession');
       case 'in-person':
         return context.tr('inPersonSession');
       default:
@@ -197,8 +195,6 @@ class _PendingCard extends ConsumerWidget {
 
   IconData _sessionTypeIcon(String type) {
     switch (type) {
-      case 'video':
-        return Icons.videocam_rounded;
       case 'in-person':
         return Icons.location_on_rounded;
       default:

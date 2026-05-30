@@ -248,7 +248,6 @@ class TherapistProfileScreen extends StatelessWidget {
 
   IconData _sessionIcon(String type) {
     final t = type.toLowerCase();
-    if (t.contains('video')) return Icons.videocam_rounded;
     if (t.contains('person') || t.contains('in-person')) {
       return Icons.location_on_rounded;
     }
